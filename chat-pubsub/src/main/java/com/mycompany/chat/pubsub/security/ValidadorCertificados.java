@@ -1,6 +1,9 @@
 package com.mycompany.chat.pubsub.security;
 
+import java.io.FileInputStream;
 import java.security.PublicKey;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
 
 /**
  * Classe responsavel por validar os certificados:
@@ -12,7 +15,10 @@ import java.security.PublicKey;
  * @author Carol
  */
 public class ValidadorCertificados {
-    public static final String PASTA = System.getProperty("user.dir") + "/certificados";
+    public static final String PASTA =
+        "C:/Users/Carol/Documents/Redes de Computadores II/chat-pubsub(Atualizado)/chat-pubsub/certificados";
+    public static final String CAMINHO_CA = PASTA + "/ca.crt";
+    public static final String CAMINHO_BROKER = PASTA + "/bruno.crt";
     
     /**
      * valida se o certificado do broker é confiavel
@@ -22,32 +28,17 @@ public class ValidadorCertificados {
      */
     public static boolean validarCertificadoBroker() {
         try {
-            CertificadoBroker certificadoBroker = (CertificadoBroker) ArquivoCertificadoUtil.carregarObjeto(PASTA + "/broker.cert");
-            PublicKey chavePublicaProfessor =
-                    (PublicKey) ArquivoCertificadoUtil.carregarObjeto(
-                            PASTA + "/professor_public.key"
-                    );
-            
-            if(certificadoBroker.getNomeBroker() == null
-                    || certificadoBroker.getNomeBroker().isBlank()
-                    || certificadoBroker.getChavePublicaBrokerBase64() == null
-                    || certificadoBroker.getChavePublicaBrokerBase64().isBlank()
-                    || certificadoBroker.getAssinaturaProfessorBase64() == null
-                    || certificadoBroker.getAssinaturaProfessorBase64().isBlank()){
-                System.out.println("Certificado do broker incompleto.");
-                return false;
-            }
-            
-            String dadosAssinados = certificadoBroker.dadosParaAssinar();
-            boolean assinaturaValida = CryptoUtil.verificarAssinatura(dadosAssinados, certificadoBroker.getAssinaturaProfessorBase64(), chavePublicaProfessor);
-            
-            if(!assinaturaValida){
-                System.out.println("Assinatura invalida.");
-                return false;
-            }
+            X509Certificate certificadoCA = carregarCertificado(CAMINHO_CA);
+            X509Certificate certificadoBroker = carregarCertificado(CAMINHO_BROKER);
+            /**
+             * Verifica se o certificado do broker foi assinado pela chave privada
+             * correspondente ao ca.crt
+             */
+            certificadoBroker.verify(certificadoCA.getPublicKey());
+            certificadoBroker.checkValidity();
             
             System.out.println("Certificado validado com sucesso.");
-            System.out.println("Broker autorizado: " + certificadoBroker.getNomeBroker());
+            System.out.println("Broker autorizado: " + certificadoBroker.getSubjectX500Principal());
             return true;
 
         } catch (Exception e){
@@ -85,10 +76,8 @@ public class ValidadorCertificados {
                 System.out.println("Certificado invalido. Nao eh possivel validar cliente.");
                 return false;
             }
-            
-            CertificadoBroker certificadoBroker = (CertificadoBroker) ArquivoCertificadoUtil.carregarObjeto(PASTA + "/broker.cert");
-            
-            PublicKey chavePublucaBroker = CryptoUtil.base64ParaChavePublica(certificadoBroker.getChavePublicaBrokerBase64());
+                        
+            PublicKey chavePublucaBroker = carregarChavePublicaBroker();
             boolean assinaturaValida = CryptoUtil.verificarAssinatura(certificadoCliente.dadosParaAssinar(),certificadoCliente.getAssinaturaBrokerBase64(), chavePublucaBroker);
             
             System.out.println("Certificado do cliente valido? "+ assinaturaValida);
@@ -99,5 +88,17 @@ public class ValidadorCertificados {
             System.out.println("Erro ao validar certificado do cliente.");
             return false;
         }
+    }
+    
+    public static PublicKey carregarChavePublicaBroker() throws Exception {
+        X509Certificate certificadoBroker = carregarCertificado(CAMINHO_BROKER);
+        return certificadoBroker.getPublicKey();
+    }
+
+    public static X509Certificate carregarCertificado(String caminho) throws Exception {
+        CertificateFactory factory = CertificateFactory.getInstance("X.509");
+        try (FileInputStream fis = new FileInputStream(caminho)){
+            return (X509Certificate) factory.generateCertificate(fis);
+        } 
     }
 }

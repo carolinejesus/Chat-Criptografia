@@ -20,18 +20,22 @@ import org.json.simple.JSONObject;
  * recebe msgs do json, valida registros de auth, chama o broker, envia
  * respostas para o cliente, mantem o topico atual do cliente, encerra a conexao
  * qnd o cliente da logout
- * 
- * nao armazena regra principal do sistema funcionando como intermediario entre cliente e broker
+ *
+ * nao armazena regra principal do sistema funcionando como intermediario entre
+ * cliente e broker
  *
  * @author caroline.jesus
  */
 public class ClienteHandler implements Runnable {
+
     private final Socket socket;
     private final Broker broker;
     private Usuario usuario;
     private PrintWriter saida;
     private BufferedReader entrada;
     private String topicoAtual;
+    public static final String PASTA
+            = "C:/Users/Carol/Documents/Redes de Computadores II/chat-pubsub(Atualizado)/chat-pubsub/certificados";
 
     public ClienteHandler(Socket socket, Broker broker) {
         this.socket = socket;
@@ -278,9 +282,8 @@ public class ClienteHandler implements Runnable {
                 return false;
             }
 
-            String pasta = System.getProperty("user.dir") + "/certificados";
-            CertificadoBroker certificadoBroker = (CertificadoBroker) ArquivoCertificadoUtil.carregarObjeto(pasta + "/broker.cert");
-            PublicKey chavePublicaBroker = CryptoUtil.base64ParaChavePublica(certificadoBroker.getChavePublicaBrokerBase64());
+            PublicKey chavePublicaBroker = ValidadorCertificados.carregarChavePublicaBroker();
+
             String dadosCertificado = nome + ":" + chavePublicaCliente;
             boolean certificadoValidado = CryptoUtil.verificarAssinatura(dadosCertificado, assinaturaBroker, chavePublicaBroker);
             System.out.println("Certificado valido? " + certificadoValidado);
@@ -316,8 +319,9 @@ public class ClienteHandler implements Runnable {
             }
 
             broker.registrarChavePublicaUsuario(nome, chavePublicaCliente);
-            String pasta = System.getProperty("user.dir") + "/certificados";
-            PrivateKey chavePrivadaBroker = (PrivateKey) ArquivoCertificadoUtil.carregarObjeto(pasta + "/broker_private.key");
+
+            PrivateKey chavePrivadaBroker = CryptoUtil.carregarChavePrivada(PASTA + "/broker_private.key");
+
             String dadosCertificado = nome + ":" + chavePublicaCliente;
             String assinaturaBroker = CryptoUtil.assinar(dadosCertificado, chavePrivadaBroker);
             JSONObject resposta = new JSONObject();
@@ -327,10 +331,16 @@ public class ClienteHandler implements Runnable {
             resposta.put("assinaturaBroker", assinaturaBroker);
             saida.println(resposta.toJSONString());
         } catch (Exception e) {
+            System.out.println("===== ERRO REAL AO REGISTRAR CLIENTE =====");
+            System.out.println("Classe do erro: " + e.getClass().getName());
+            System.out.println("Mensagem: " + e.getMessage());
             e.printStackTrace();
+            System.out.println("==========================================");
+
             JSONObject erro = new JSONObject();
             erro.put("type", "REGISTER_ERROR");
             erro.put("message", "Falha ao registrar cliente.");
+
             saida.println(erro.toJSONString());
         }
     }
@@ -450,11 +460,11 @@ public class ClienteHandler implements Runnable {
         resposta.put("messages", mensagensArray);
         saida.println(resposta.toJSONString());
     }
-    
+
     private void sincronizarMensagens() {
         broker.entregarMensagensPendentes(usuario.getNome(), this);
     }
-    
+
     private void listarParticipantes(String topico) {
         if (!broker.usuarioEstaInscrito(usuario.getNome(), topico)) {
             saida.println("Erro: voce nao esta inscrito nesse topico.");
@@ -471,7 +481,7 @@ public class ClienteHandler implements Runnable {
         System.out.println("enviando participantes " + resposta.toJSONString());
         saida.println(resposta.toJSONString());
     }
-    
+
     private void listarTopicos() {
         JSONObject json = new JSONObject();
         org.json.simple.JSONArray arrayTopicos = new org.json.simple.JSONArray();
@@ -484,12 +494,12 @@ public class ClienteHandler implements Runnable {
         System.out.println(json.toJSONString());
         saida.println(json.toJSONString());
     }
-    
+
     public boolean enviarMensagem(Mensagem msg) {
         JSONObject json = JsonUtil.mensagemToJson(msg);
         saida.println(json.toJSONString());
         return !saida.checkError();
-    }    
+    }
 
     public boolean enviarJson(JSONObject json) {
         saida.println(json.toJSONString());
